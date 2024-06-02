@@ -1,153 +1,168 @@
-import numpy as np
-import pandas as pd
-import datetime
+#Torch stuff
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.utils.data import Dataset
+import time 
 
-import copy
-import csv
+
+from captum.attr import IntegratedGradients
+import tqdm
 import os
-import time
-import pickle
-import itertools
-
-from pandas import DataFrame
-
-import nltk
-from nltk import skipgrams
-from nltk import pos_tag
-from nltk.tokenize import sent_tokenize, word_tokenize
-from nltk.util import ngrams
-nltk.download('punkt')
-nltk.download('averaged_perceptron_tagger')
-nltk.download('stopwords')
-from string import punctuation
-from nltk.corpus import stopwords
-
 import gc
-from random import random
-import time
 
-from collections import Counter
-import heapq
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-import sklearn
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.metrics import accuracy_score
-from sklearn import preprocessing
+class Model(nn.Module):
 
-from functools import partial
-from tqdm import tqdm
-tqdm = partial(tqdm, position=0, leave=True)
+    def __init__(self, in_size, num_classes):
+        super(Model, self).__init__()
 
-import warnings
-warnings.filterwarnings("ignore")
+        self.act = nn.ReLU()
+        self.dp = 0.40
+        self.width = 256
+        self.num_classes = num_classes
+        self.stack = nn.Sequential(
+            nn.Dropout(p = self.dp),
+            nn.Linear(in_size, self.width),
+            self.act,
+            nn.Dropout(p = self.dp),
+            nn.Linear(self.width, self.width),
+            self.act,
+            nn.Dropout(p = self.dp),
+            nn.Linear(self.width, self.width),
+            self.act,
+            nn.Dropout(p = self.dp),
+            nn.Linear(self.width, self.width),
+            self.act,
+            nn.Dropout(p = self.dp),
+            nn.Linear(self.width, self.width),
+            self.act,
+            nn.Dropout(p = self.dp),
+            nn.Linear(self.width, 128),
+            self.act,
+            nn.Linear(128, self.num_classes)
+        )
 
-from itertools import chain
-import copy
+    def forward(self, x):
+        return self.stack(x)
 
-import argparse
+class Loader(Dataset):
+    def __init__(self, x, y):
+        self.x = torch.nan_to_num(torch.Tensor(x))
+        self.y = torch.Tensor(y)
 
-tags = ['CC', 'CD', 'DT', 'EX', 'FW', 'IN', 'JJ', 'JJR', 'JJS', 'LS', 'MD', 'NN', 'NNS', 'NNP', 'NNPS', 'PDT', 'POS', 'PRP', 'PRP$', 'RB', 'RBR', 'RBS', 'RP', 'SYM', 'TO', 'UH', 'VB', 'VBD', 'VBG', 'VBN', 'VBP', 'VBZ', 'WDT', 'WP', 'WP$', 'WRB']
-idx = 0
-temp = dict()
-offset = 65
-for tag in tags:
-    if offset + idx == 90:
-        offset = 72
-    temp[tag] = chr(offset + idx)
-    idx += 1
-tags = temp
+    def __len__(self):
+        return len(self.y)
 
-to_char = lambda x: tags[x] if x in tags else x
-token_and_tag = lambda text: [tup[1] for tup in pos_tag(tokenize(text))]
-token_tag_join = lambda text: ''.join([to_char(tag) for tag in token_and_tag(text)])
+    def __getitem__(self, idx):
+        return self.x[idx], self.y[idx]
 
-def tag(texts):
-    return [token_tag_join(text) for text in texts]
+def train_and_eval(model, training_set, validation_set, loss_function, optimizer, scheduler, epochs=30, save_path='./', save_epoch=10):
 
-def countSkip(skipgram, texts):
+    model.to(device)
 
-    total = 0
-    m = len(skipgram)
+    for epoch in range(1, epochs + 1):
+        print('------------', '\n', 'Epoch #:', epoch, '\n', 'Training:')
 
-    for text in texts:
+        with torch.set_grad_enabled(True):
 
-        n = len(text)
+            total = 0
+            correct = 0
 
-        mat = [[0 for i in range(n + 1)] for j in range(m + 1)]
-        for j in range(n + 1):
-            mat[0][j] = 1
+            model.train()
 
-        for i in range(1, m + 1):
-            for j in range(1, n + 1):
-                mat[i][j] = mat[i][j - 1]
+            labels = []
+            predictions = []
+            all_preds = []
+            all_labels = []
 
-                if skipgram[i - 1] == text[j - 1]:
-                    mat[i][j] += mat[i - 1][j - 1]
+            with tqdm.tqdm(training_set, unit = "batch", bar_format = '{l_bar}{bar:20}{r_bar}{bar:-20b}') as tqdm_train:
+                for training_data, labels in tqdm_train:
+                    tqdm_train.set_description(f'Epoch: {epoch}')
 
-        total += mat[m][n]
+                    training_data = training_data.to(device)
+                    labels = torch.tensor(labels, dtype = torch.long)
+                    labels = labels.to(device)
 
-    return total
+                    optimizer.zero_grad()
 
-def get_skipgrams(text, n, k):
-    if n > 1:
-        ans = [skipgram for skipgram in skipgrams(text, n, k)]
-    else:
-        ans = ngrams(text, n)
-    return ans
+                    prediction = model(training_data).squeeze(1)
 
-def return_best_pos_n_grams(n, L, pos_texts):
-    n_grams = ngrams(pos_texts, n)
+                    # Debug statement to check target labels
+                    # print(f'Prediction:\n.............. \n{prediction}')
+                    # print(f'Labels: \n............. \n{labels}')
 
-    data = dict(Counter(n_grams))
-    list_ngrams = heapq.nlargest(L, data.keys(), key=lambda k: data[k])
-    return list_ngrams
+                    loss = loss_function(prediction, labels)
 
-def return_best_word_n_grams(n, L, tokens):
+                    loss.backward()
+                    optimizer.step()
 
-    all_ngrams = ngrams(tokens, n)
+                    for idx, i in enumerate(prediction):
+                        if torch.argmax(i) == labels[idx]:
+                            correct += 1
+                        total += 1
 
-    data = dict(Counter(all_ngrams))
-    list_ngrams = heapq.nlargest(L, data.keys(), key=lambda k: data[k])
-    return list_ngrams
+                    tqdm_train.set_postfix(loss=loss.item(), accuracy=100.*correct/total)
+                    time.sleep(0.1)
 
-def return_best_n_grams(n, L, text):
+            training_accuracy = round(correct/total, 5)
+            print('Training Accuracy: ', training_accuracy)
 
-    n_grams = ngrams(text, n)
+            scheduler.step()
 
-    data = dict(Counter(n_grams))
-    list_ngrams = heapq.nlargest(L, data.keys(), key=lambda k: data[k])
-    return list_ngrams
+        print('------------', '\n', 'Validation:')
+        model.eval()
+        gc.collect()
 
-def ngram_rep(text, pos_text, features):
+        total = 0
+        correct = 0
 
-    to_ret = []
-    ret_idx = 0
+        with torch.no_grad():
 
-    for idx in range(len(features[0])):
-        num_ngrams = len(Counter(ngrams(text, len(features[0][idx][0]))))
+            with tqdm.tqdm(validation_set, unit="batch", bar_format = '{l_bar}{bar:20}{r_bar}{bar:-20b}') as tqdm_val:
+                tqdm_val.set_description(f'Epoch: {epoch}')
+                for val_data, labels in tqdm_val:
 
-        for n_gram in features[0][idx]:
-            to_ret.append(text.count(''.join(n_gram)) / num_ngrams if num_ngrams != 0 else 0)
+                    val_data = val_data.to(device)
 
-    for idx in range(len(features[1])):
-        num_pos_ngrams = len(Counter(ngrams(pos_text, len(features[1][idx][0]))))
+                    labels = torch.tensor(labels, dtype = torch.long)
+                    labels = labels.to(device)
 
-        for pos_n_gram in features[1][idx]:
-            to_ret.append(pos_text.count(''.join(pos_n_gram)) / num_pos_ngrams if num_pos_ngrams != 0 else 0)
+                    prediction = model(val_data).squeeze(1)
 
-    words = tokenize(text)
-    spaced_text = ' '.join(words)
-    for idx in range(len(features[2])):
-        num_word_ngrams = len(Counter(ngrams(words, len(features[2][idx][0]))))
+                    for idx, i in enumerate(prediction):
+                        if torch.argmax(i) == labels[idx]:
+                            correct += 1
+                        total += 1
 
-        for word_ngram in features[2][idx]:
-            to_ret.append(spaced_text.count(' '.join(word_ngram)) / num_word_ngrams if num_word_ngrams != 0 else 0)
+                    tqdm_val.set_postfix(accuracy=100.*correct/total)
+                    time.sleep(0.1)
 
-    return to_ret
+            validation_accuracy = round(correct/total, 5)
+            print('Validation Accuracy: ', validation_accuracy)
+            gc.collect()
 
+        if epoch % save_epoch == 0:
+            if not os.path.isdir(save_path):
+                os.path.makedirs(save_path)
+            torch.save(model.state_dict(), os.path.join(save_path, f'model_{epoch}.pt'))
 
-def tokenize(text):
-    ret = []
-    for sent in sent_tokenize(text):
-        ret.extend(word_tokenize(sent))
-    return ret
+    return model
+
+def genPreds(data, tokenizer, classifier):
+
+    preds = []
+
+    for idx, row in data.iterrows():
+        elem = row['Text']
+        elem = tokenizer(elem, return_tensors="pt", padding="max_length", truncation=True, max_length=512).to(device)
+        with torch.no_grad():
+            logits = classifier(**elem).logits
+        preds.append(logits.argmax().item())
+
+        del elem
+        del logits
+        
+    return preds
