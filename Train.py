@@ -1,33 +1,24 @@
-# import os
-# import argparse
-# import datetime
-# import gc
-# import pandas as pd
-# import numpy as np
-# import pickle
-# import sklearn
-# import torch
-# import torch.nn as nn
-# import torch.optim as optim
-# import torch.utils.data
-from sklearn import model_selection
-from Utils import *  
-from NN import * 
+from Utils import *
+from NN import *
+import pandas as pd
+from datetime import datetime
+
 
 def main():
-    now = datetime.datetime.now()
+    now = datetime.now()
 
     gc.collect()
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--train', '-T', help='Path to Training Data', default='../Data/train.txt')
-    parser.add_argument('--authors_total', '-at', help='Number of Total Authors in Corpus', default=10)
+    parser.add_argument('--train', '-T', help='Path to Training Data', default='../Data/TuringBench_1.txt')
+    parser.add_argument('--authors_total', '-at', help='Number of Total Authors in Corpus', default=20)
 
     parser.add_argument('--trial_name', '-tm', help='The Current Trial\'s Name (e.g. Dataset Name)')
     parser.add_argument('--test_size', '-ts', help='Proportion of data to use for testing', default=0.15)
 
-    parser.add_argument('--top_ngrams', '-tng', help='t, The Number of top Character and POS-ngrams to Retain', default=256)
+    parser.add_argument('--top_ngrams', '-tng', help='t, The Number of top Character and POS-ngrams to Retain',
+                        default=256)
     parser.add_argument('--V', '-V', help='V, the set of n-gram lengths to use', default=[1, 2, 3, 4])
 
     parser.add_argument('--batch_size', '-bs', help='Batch Size', default=512)
@@ -39,9 +30,6 @@ def main():
     parser.add_argument('--gamma', '-g', help='Scheduler Gamma Constant', default=0.30)
 
     args = parser.parse_args()
-
-    # Ensure authors_total is correct
-    authors_total = max(int(args.authors_total), 10)
 
     dir = os.getcwd()
     timestamp = now.strftime("%m.%d.%H.%M.%S")
@@ -61,53 +49,54 @@ def main():
     data['POS'] = tag(data['text'])
 
     print('------------', '\n', 'Counting and aggregating texts...')
-    number_texts = [0 for idx in range(authors_total)]
-    texts = ['' for idx in range(authors_total)]
-    pos_texts = ['' for idx in range(authors_total)]
+    number_texts = [0 for idx in range(args.authors_total)]
+    texts = ['' for idx in range(args.authors_total)]
+    pos_texts = ['' for idx in range(args.authors_total)]
 
-    total = ' '.join(texts)
-    pos_total = ''.join(pos_texts)
-
-    for _, row in data.iterrows():
-        author = int(row['label'])
-        if author >= len(number_texts):
-            continue # Skip if author index is out of range
+    for index, row in data.iterrows():
+        author = int(row[0])
         number_texts[author] += 1
+
         filtered_sentence = row['text'].replace('\n', '').strip()
 
-        texts[author] = ' '.join([texts[author], filtered_sentence])
-        pos_texts[author] = ''.join([pos_texts[author], row[2]])
+        texts[author] += ' ' + filtered_sentence
+        pos_texts[author] += ' ' + str(row[2])
+
+    # Creating single strings from the lists
+    total = ' '.join(texts)
+    pos_total = ' '.join(pos_texts)
 
     print('------------', '\n', 'Preprocessing complete!')
     print('------------', '\n', 'Generating Char n-grams...')
 
-    n_grams = [return_best_n_grams(n, int(args.top_ngrams), total) for n in [1, 2, 3, 4]]
+    n_grams = [return_best_n_grams(n, args.top_ngrams, total) for n in [1, 2, 3, 4]]
 
     print('------------', '\n', 'Generating POS n-grams...')
 
-    pos_n_grams = [return_best_n_grams(n, int(args.top_ngrams), pos_total) for n in [1, 2, 3, 4]]
+    pos_n_grams = [return_best_n_grams(n, args.top_ngrams, pos_total) for n in [1, 2, 3, 4]]
 
     print('------------', '\n', 'Generating Word n-grams...')
 
-    word_n_grams = [return_best_word_n_grams(n, int(args.top_ngrams), tokenize(total)) for n in [1, 2, 3, 4]]
+    word_n_grams = [return_best_word_n_grams(n, args.top_ngrams, tokenize(total)) for n in [1, 2, 3, 4]]
 
     print('------------', '\n', 'Generating data...')
     X = []
     y = []
     processed = 0
-    for _, row in data.iterrows():
-        if processed % 1000 == 0:
+    for index, row in data.iterrows():
+        if (processed % 1000 == 0):
             print(f'{processed} texts processed')
 
         y.append(int(row['label']))
-        X.append(ngram_rep(row['text'], row[2], [args.V, n_grams, args.V, pos_n_grams, args.V, word_n_grams]))
+        X.append(ngram_rep(row['text'], row['POS'], [n_grams, pos_n_grams, word_n_grams]))
 
         processed += 1
 
     X = np.array(X)
     y = np.array(y)
-    print(args.test_size)
-    X_train, X_test, y_train, y_test = model_selection.train_test_split(X, y, test_size=float(args.test_size), random_state=1, shuffle=True, stratify=y)
+
+    X_train, X_test, y_train, y_test = sklearn.model_selection.train_test_split(X, y, test_size=args.test_size,
+                                                                                random_state=1, shuffle=False)
 
     print('------------', '\n', 'Scaling, Loading, and Shuffling Data')
     Scaler = sklearn.preprocessing.StandardScaler().fit(X_train)
@@ -127,22 +116,21 @@ def main():
 
     features = [n_grams, pos_n_grams, word_n_grams]
     pickle.dump(features, open(os.path.join(save_path, 'features.pkl'), 'wb'))
+    pickle.dump(Scaler, open(os.path.join(save_path, 'Scaler.pkl'), 'wb'))
 
-    model = Model(len(X_train[0]), int(args.authors_total))  
-    
+    model = Model(len(X_train[0]), args.authors_total)
+
     loss_function = nn.CrossEntropyLoss(weight=torch.Tensor(number_texts).to(device))
     optimizer = optim.Adam(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=args.step, gamma=args.gamma)
 
-    # Debug statement to check number of classes
-    # print(f'Number of classes: {int(args.authors_total)}')
-    # print(f'Unique labels in dataset: {np.unique(y_train)}')
-
-    model = train_and_eval(model, training_set, validation_set, loss_function, optimizer, scheduler, save_path=save_path, epochs=int(args.epochs), save_epoch=10)
+    model = train_and_eval(model, training_set, validation_set, loss_function, optimizer, scheduler,
+                           save_path=save_path, epochs=args.epochs, save_epoch=10)
 
     torch.save(model.state_dict(), os.path.join(save_path, 'model.pt'))
 
     print('------------', '\n', 'Training Done!')
+
 
 if __name__ == "__main__":
     main()
