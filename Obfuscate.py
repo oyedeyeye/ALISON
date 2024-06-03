@@ -36,7 +36,7 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--texts', '-t', help='Path to texts for obfuscation', default='../Data/TuringBench_1.txt')
+    parser.add_argument('--texts', '-t', help='Path to texts for obfuscation', default='./Data/TuringBench_1.txt')
     parser.add_argument('--authors_total', '-at', help='Number of Total Authors in Corpus', default=20)
     parser.add_argument('--dir', '-f', help='Path to the directory containing the trained model',
                         default='./Trained_Models/TuringBench_1_06.03.11.14.16')
