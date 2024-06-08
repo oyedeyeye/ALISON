@@ -4,6 +4,9 @@ import pandas as pd
 from datetime import datetime
 
 
+# Include these print statements before creating the model
+# print(f"X_train[0] shape: {len(X_train[0])}")
+
 def main():
     now = datetime.now()
 
@@ -11,7 +14,7 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('--train', '-T', help='Path to Training Data', default='../Data/TuringBench_1.txt')
+    parser.add_argument('--train', '-T', help='Path to Training Data', default='./Data/testTuring_1.txt')
     parser.add_argument('--authors_total', '-at', help='Number of Total Authors in Corpus', default=20)
 
     parser.add_argument('--trial_name', '-tm', help='The Current Trial\'s Name (e.g. Dataset Name)')
@@ -118,6 +121,7 @@ def main():
     pickle.dump(features, open(os.path.join(save_path, 'features.pkl'), 'wb'))
     pickle.dump(Scaler, open(os.path.join(save_path, 'Scaler.pkl'), 'wb'))
 
+    print(f"X_train[0] shape: {len(X_train[0])}")
     model = Model(len(X_train[0]), args.authors_total)
 
     loss_function = nn.CrossEntropyLoss(weight=torch.Tensor(number_texts).to(device))
