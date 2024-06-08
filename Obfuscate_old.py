@@ -45,7 +45,7 @@ def main():
     parser.add_argument('--texts', '-t', help='Path to texts for obfuscation', default='./Data/testTuring_1.txt')
     parser.add_argument('--authors_total', '-at', help='Number of Total Authors in Corpus', default=20)
     parser.add_argument('--dir', '-f', help='Path to the directory containing the trained model',
-                        default='./Trained_Models/testTuring_06.07.02.11.14')
+                        default='./Trained_Models/testTuring_06.08.19.29.06')
     parser.add_argument('--trial_name', '-tm', help='The Current Trial\'s Name (e.g. Dataset Name)', default='GPT')
 
     parser.add_argument('--L', '-L', help='L, the number of top POS n-grams to mask', default=15)
@@ -103,9 +103,10 @@ def main():
     ig_set = DataLoader(Loader(ngram_reps, data['label']), batch_size=1, shuffle=False)
 
     print('------------', '\n', 'Loading Models...')
-
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = Model(len(features_flattened), args.authors_total) # Modified --> replaced with features
-    model.load_state_dict(torch.load(os.path.join(args.dir, 'model.pt')), strict=False)
+    model.load_state_dict(torch.load(os.path.join(args.dir, 'model.pt'), map_location=device), strict=False)
+    model.to(device) # ensure model is moved to device
     model.eval()
 
     ig = IntegratedGradients(model)
