@@ -111,22 +111,26 @@ def main():
 
     ig = IntegratedGradients(model)
 
-    all = []
+    all_attributions = []
     torch.cuda.empty_cache()
 
     print('------------', '\n', 'Attribution Iteration...')
-    for data, label in ig_set:
+    for data_tensor, label_tensor in ig_set:
+        data_tensor = data_tensor.to(device)
+        label_tensor = label_tensor.to(torch.int64).to(device)
 
-        attributions = ig.attribute(data.cuda(), target = label.to(torch.int64).cuda(), n_steps = args.ig_steps)
+        attributions = ig.attribute(data_tensor, target=label_tensor, n_steps=args.ig_steps)
         attributions = attributions.tolist()
 
         for attribution in attributions:
-            all.append(attribution)
+            all_attributions.append(attribution)
 
         torch.cuda.empty_cache()
         del attributions
 
-    data['attribution'] = all
+    # Create a new DataFrame for attributions and concatenate it with the original data DataFrame
+    attributions_df = pd.DataFrame(all_attributions, columns=[f'attribution_{i}' for i in range(len(all_attributions[0]))])
+    data = pd.concat([data.reset_index(drop=True), attributions_df.reset_index(drop=True)], axis=1)
 
     print('------------', '\n', 'isValid Function...')
 
@@ -134,18 +138,22 @@ def main():
     to_compressed = lambda tag: tags[tag] if tag in tags else tag
 
     print('------------', '\n', 'Obfuscation in Progress...')
-
+    obfuscated_texts = []
     for idx, row in data.iterrows():
-
         torch.cuda.empty_cache()
-
         text = row['text']
-        attribution = row['attribution']
 
+        # Retrieve attributions from the correct columns
+        attribution = row[[f'attribution_{i}' for i in range(len(all_attributions[0]))]].values
         mult = [args.c ** len(feature) for feature in features_flattened]
         attribution = np.multiply(attribution, mult)
 
-        ranked_indexes = np.argsort(np.array(ranked_indexes))
+        # Debug print statement to trace variable values
+        # print(f'text: {text}')
+        # print(f'attribution: {attribution}')
+        # print(f'mult: {mult}')
+
+        ranked_indexes = np.argsort(np.array(attribution))
         ranked_indexes = [elem for elem in ranked_indexes if isValid(elem)]
         ranked_indexes.reverse()
         to_replace = [features_flattened[elem] for elem in ranked_indexes]
@@ -181,6 +189,8 @@ def main():
     obfuscated_texts = clean(obfuscated_texts)
     with open(os.path.join(save_path, 'adversarial_texts.txt'), 'w') as writer:
         writer.writelines(obfuscated_texts)
+
+    print('------------', '\n', 'Obfuscated Text Written to document...')
 
 if __name__ == "__main__":
     main()
