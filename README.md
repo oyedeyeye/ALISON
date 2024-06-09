@@ -24,6 +24,8 @@ python Train.py
 ```
 Arguments:
 
+Set defualt values for these arguments within your script. Otherwise, pass it as argument.
+
   * --train: The path to the training data.
   * --authors_total: Total number of authors in the dataset (default 10)
   * --dir: Path to the directory containing the trained model (Contains feature set, model, etc.)
@@ -44,6 +46,8 @@ python Obfuscate.py
 ```
 
 Arguments:
+
+Set defualt values for these arguments within your script. Otherwise, pass it as argument.
 
   * --texts: The path to the texts for obfuscation.
   * --authors_total: Total number of authors in the dataset (default 10)
