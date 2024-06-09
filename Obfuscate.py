@@ -32,10 +32,12 @@ def main():
     parser = argparse.ArgumentParser()
 
     # Prefeerrably, set defaults for all arguments
-    parser.add_argument('--texts', '-t', help='Path to texts for obfuscation', default='./Data/testTuring_1.txt')
-    parser.add_argument('--authors_total', '-at', help='Number of Total Authors in Corpus', default=20)
+    parser.add_argument('--texts', '-t', help='Path to texts for obfuscation',
+                        default='./Data/testTuring_1.txt') # default set to a small sample data.
+    parser.add_argument('--authors_total', '-at', help='Number of Total Authors in Corpus',
+                        default=20) # default set to a small sample data.
     parser.add_argument('--dir', '-f', help='Path to the directory containing the trained model',
-                        default='./Trained_Models/testTuring_06.08.19.29.06')
+                        default='./Trained_Models/testTuring_06.08.19.29.06') # Default changes because each trial appends timestamp to the Train.py trial name
     parser.add_argument('--trial_name', '-tm', help='The Current Trial\'s Name (e.g. Dataset Name)', default='testTuring_1')
 
     parser.add_argument('--L', '-L', help='L, the number of top POS n-grams to mask', default=15)

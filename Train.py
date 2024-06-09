@@ -11,11 +11,13 @@ def main():
 
     parser = argparse.ArgumentParser()
 
-    # Prefeerrably, set defaults for all arguments
-    parser.add_argument('--train', '-T', help='Path to Training Data', default='./Data/testTuring_1.txt')
-    parser.add_argument('--authors_total', '-at', help='Number of Total Authors in Corpus', default=20)
-
-    parser.add_argument('--trial_name', '-tm', help='The Current Trial\'s Name (e.g. Dataset Name)', default='testTuring')
+    # Preferrably, set defaults for all arguments
+    parser.add_argument('--train', '-T', help='Path to Training Data',
+                        default='./Data/testTuring_1.txt') # default set to a small sample data.
+    parser.add_argument('--authors_total', '-at', help='Number of Total Authors in Corpus',
+                        default=20) # default number of authors in the article is 20
+    parser.add_argument('--trial_name', '-tm', help='The Current Trial\'s Name (e.g. Dataset Name)',
+                        default='testTuring') # default trial name for dump model data
     parser.add_argument('--test_size', '-ts', help='Proportion of data to use for testing', default=0.15)
 
     parser.add_argument('--top_ngrams', '-tng', help='t, The Number of top Character and POS-ngrams to Retain',
