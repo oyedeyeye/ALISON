@@ -4,9 +4,6 @@ import pandas as pd
 from datetime import datetime
 
 
-# Include these print statements before creating the model
-# print(f"X_train[0] shape: {len(X_train[0])}")
-
 def main():
     now = datetime.now()
 
@@ -14,10 +11,11 @@ def main():
 
     parser = argparse.ArgumentParser()
 
+    # Prefeerrably, set defaults for all arguments
     parser.add_argument('--train', '-T', help='Path to Training Data', default='./Data/testTuring_1.txt')
     parser.add_argument('--authors_total', '-at', help='Number of Total Authors in Corpus', default=20)
 
-    parser.add_argument('--trial_name', '-tm', help='The Current Trial\'s Name (e.g. Dataset Name)')
+    parser.add_argument('--trial_name', '-tm', help='The Current Trial\'s Name (e.g. Dataset Name)', default='testTuring')
     parser.add_argument('--test_size', '-ts', help='Proportion of data to use for testing', default=0.15)
 
     parser.add_argument('--top_ngrams', '-tng', help='t, The Number of top Character and POS-ngrams to Retain',
